@@ -1,0 +1,19 @@
+[project]
+name = "avartan"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "openai",
+    "firecrawl-py",
+    "python-dotenv",
+]
+
+[project.scripts]
+avartan = "avartan:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["avartan", "agent", "tools"]
