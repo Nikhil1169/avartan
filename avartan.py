@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 from agent import run_turn
+from tracing import tracer_from_env, to_json
 from tools import (
     ReadFileTool,
     WriteFileTool,
@@ -84,15 +85,26 @@ def main():
                 task_text = f.read()
 
         history.append({"role": "user", "content": task_text})
-        run_turn(
-            client,
-            MODEL,
-            history,
-            tools_by_name,
-            openai_tools,
-            auto_approve=True,
-            max_iterations=args.max_iterations,
-        )
+
+        tracer = tracer_from_env(project_id="avartan", service_name="avartan")
+        trace_id = tracer.new_id()
+        with tracer.span("agent.avartan", "AGENT", trace_id) as agent_span:
+            agent_span.attributes["agent.name"] = "avartan"
+            agent_span.attributes["agent.tools"] = to_json([t.name for t in tools])
+            run_turn(
+                client,
+                MODEL,
+                history,
+                tools_by_name,
+                openai_tools,
+                auto_approve=True,
+                max_iterations=args.max_iterations,
+                tracer=tracer,
+                trace_id=trace_id,
+                parent_span_id=agent_span.span_id,
+                agent_span=agent_span,
+            )
+        tracer.close()
         return
 
     plan_mode = False

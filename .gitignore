@@ -5,3 +5,4 @@ __pycache__/
 avartan.egg-info/
 .claude/
 jobs/
+traces.jsonl
