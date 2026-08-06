@@ -59,6 +59,8 @@ def run_turn(
                     if choice.finish_reason:
                         finish_reason = choice.finish_reason
 
+                print(f"[finish_reason] {finish_reason!r}")
+
                 error = None
                 break
             except openai.APIError as e:
@@ -92,7 +94,24 @@ def run_turn(
             )
 
             for call in tool_calls.values():
-                args = json.loads(call["arguments"])
+                print(f"[tool_call] name={call['name']!r} arguments={call['arguments']!r}")
+
+                try:
+                    args = json.loads(call["arguments"])
+                except json.JSONDecodeError as e:
+                    print(f"[tool_call] json.loads failed on: {call['arguments']!r} ({e})")
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call["id"],
+                            "content": (
+                                f"error: could not parse arguments as JSON: "
+                                f"{call['arguments']!r}"
+                            ),
+                        }
+                    )
+                    continue
+
                 tool = tools_by_name.get(call["name"])
 
                 if tool is None:
