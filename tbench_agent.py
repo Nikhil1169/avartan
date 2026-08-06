@@ -1,37 +1,46 @@
-import os
 import shlex
-from pathlib import Path
+from typing import override
 
-from terminal_bench.agents.installed_agents.abstract_installed_agent import (
-    AbstractInstalledAgent,
-)
-from terminal_bench.terminal.models import TerminalCommand
+from harbor.agents.installed.base import BaseInstalledAgent
+from harbor.environments.base import BaseEnvironment
+from harbor.models.agent.context import AgentContext
 
 
-class AvartanAgent(AbstractInstalledAgent):
+class AvartanAgent(BaseInstalledAgent):
     @staticmethod
+    @override
     def name() -> str:
         return "avartan"
 
-    @property
-    def _env(self) -> dict[str, str]:
-        return {
-            "OPENROUTER_API_KEY": os.environ["OPENROUTER_API_KEY"],
-            "FIRECRAWL_API_KEY": os.environ["FIRECRAWL_API_KEY"],
+    @override
+    async def install(self, environment: BaseEnvironment) -> None:
+        await self.exec_as_root(
+            environment,
+            command=(
+                "if ! command -v python3 >/dev/null 2>&1 || "
+                "! command -v pip3 >/dev/null 2>&1 || "
+                "! command -v git >/dev/null 2>&1; then "
+                "apt-get update && apt-get install -y python3 python3-pip git; "
+                "fi"
+            ),
+            env={"DEBIAN_FRONTEND": "noninteractive"},
+        )
+        await self.exec_as_agent(
+            environment,
+            command="pip install git+https://github.com/Nikhil1169/avartan.git@main",
+        )
+
+    @override
+    async def run(
+        self, instruction: str, environment: BaseEnvironment, context: AgentContext
+    ) -> None:
+        env = {
+            "OPENROUTER_API_KEY": self._get_env("OPENROUTER_API_KEY"),
+            "FIRECRAWL_API_KEY": self._get_env("FIRECRAWL_API_KEY"),
         }
-
-    @property
-    def _install_agent_script_path(self) -> Path:
-        return Path(__file__).parent / "install_avartan.sh"
-
-    def _run_agent_commands(self, instruction: str) -> list[TerminalCommand]:
         escaped_instruction = shlex.quote(instruction)
-        return [
-            TerminalCommand(
-                command=f"avartan --task {escaped_instruction} --max-iterations 30",
-                min_timeout_sec=0.0,
-                max_timeout_sec=float("inf"),
-                block=True,
-                append_enter=True,
-            )
-        ]
+        await self.exec_as_agent(
+            environment,
+            command=f"avartan --task {escaped_instruction} --max-iterations 30",
+            env=env,
+        )
