@@ -1,5 +1,7 @@
 import json
 
+import openai
+
 
 def run_turn(
     client,
@@ -19,41 +21,56 @@ def run_turn(
         if max_iterations is not None and iterations > max_iterations:
             return content
 
-        stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=openai_tools,
-            stream=True,
-        )
+        error = None
 
-        content = ""
-        tool_calls = {}
-        finish_reason = None
+        for attempt in range(2):
+            content = ""
+            tool_calls = {}
+            finish_reason = None
 
-        for chunk in stream:
-            choice = chunk.choices[0]
-            delta = choice.delta
+            try:
+                stream = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    tools=openai_tools,
+                    stream=True,
+                )
 
-            print(delta.content or "", end="", flush=True)
-            content += delta.content or ""
+                for chunk in stream:
+                    choice = chunk.choices[0]
+                    delta = choice.delta
 
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    call = tool_calls.setdefault(
-                        tc.index, {"id": "", "name": "", "arguments": ""}
-                    )
-                    if tc.id:
-                        call["id"] += tc.id
-                    if tc.function:
-                        if tc.function.name:
-                            call["name"] += tc.function.name
-                        if tc.function.arguments:
-                            call["arguments"] += tc.function.arguments
+                    print(delta.content or "", end="", flush=True)
+                    content += delta.content or ""
 
-            if choice.finish_reason:
-                finish_reason = choice.finish_reason
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            call = tool_calls.setdefault(
+                                tc.index, {"id": "", "name": "", "arguments": ""}
+                            )
+                            if tc.id:
+                                call["id"] += tc.id
+                            if tc.function:
+                                if tc.function.name:
+                                    call["name"] += tc.function.name
+                                if tc.function.arguments:
+                                    call["arguments"] += tc.function.arguments
+
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+
+                error = None
+                break
+            except openai.APIError as e:
+                error = e
+            except Exception as e:
+                error = e
 
         print()
+
+        if error is not None:
+            print(f"error: {type(error).__name__}: {error}")
+            return content
 
         if finish_reason == "tool_calls":
             messages.append(

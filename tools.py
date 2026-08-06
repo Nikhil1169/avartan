@@ -41,8 +41,11 @@ class ReadFileTool(Tool):
     is_read_only = True
 
     def execute(self, args: dict) -> str:
-        with open(args["path"]) as f:
-            return f.read()
+        try:
+            with open(args["path"]) as f:
+                return f.read()
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
 
 
 class WriteFileTool(Tool):
@@ -59,9 +62,12 @@ class WriteFileTool(Tool):
     is_read_only = False
 
     def execute(self, args: dict) -> str:
-        with open(args["path"], "w") as f:
-            f.write(args["content"])
-        return f"Wrote {len(args['content'])} bytes to {args['path']}"
+        try:
+            with open(args["path"], "w") as f:
+                f.write(args["content"])
+            return f"Wrote {len(args['content'])} bytes to {args['path']}"
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
 
 
 class EditFileTool(Tool):
@@ -79,16 +85,19 @@ class EditFileTool(Tool):
     is_read_only = False
 
     def execute(self, args: dict) -> str:
-        with open(args["path"]) as f:
-            content = f.read()
+        try:
+            with open(args["path"]) as f:
+                content = f.read()
 
-        if args["old_string"] not in content:
-            return f"Error: old_string not found in {args['path']}"
+            if args["old_string"] not in content:
+                return f"Error: old_string not found in {args['path']}"
 
-        content = content.replace(args["old_string"], args["new_string"], 1)
-        with open(args["path"], "w") as f:
-            f.write(content)
-        return f"Edited {args['path']}"
+            content = content.replace(args["old_string"], args["new_string"], 1)
+            with open(args["path"], "w") as f:
+                f.write(content)
+            return f"Edited {args['path']}"
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
 
 
 class GrepTool(Tool):
@@ -105,19 +114,22 @@ class GrepTool(Tool):
     is_read_only = True
 
     def execute(self, args: dict) -> str:
-        regex = re.compile(args["pattern"])
-        root = args.get("path", ".")
-        matches = []
+        try:
+            regex = re.compile(args["pattern"])
+            root = args.get("path", ".")
+            matches = []
 
-        for dirpath, _, filenames in os.walk(root):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                with open(filepath, errors="ignore") as f:
-                    for lineno, line in enumerate(f, start=1):
-                        if regex.search(line):
-                            matches.append(f"{filepath}:{lineno}:{line.rstrip()}")
+            for dirpath, _, filenames in os.walk(root):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    with open(filepath, errors="ignore") as f:
+                        for lineno, line in enumerate(f, start=1):
+                            if regex.search(line):
+                                matches.append(f"{filepath}:{lineno}:{line.rstrip()}")
 
-        return "\n".join(matches) if matches else "No matches found."
+            return "\n".join(matches) if matches else "No matches found."
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
 
 
 class BashTool(Tool):
@@ -133,10 +145,13 @@ class BashTool(Tool):
     is_read_only = False
 
     def execute(self, args: dict) -> str:
-        result = subprocess.run(
-            args["command"], shell=True, capture_output=True, text=True
-        )
-        return result.stdout + result.stderr
+        try:
+            result = subprocess.run(
+                args["command"], shell=True, capture_output=True, text=True
+            )
+            return result.stdout + result.stderr
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
 
 
 class TodoWriteTool(Tool):
