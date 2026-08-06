@@ -183,11 +183,14 @@ class TodoWriteTool(Tool):
         self.todos = []
 
     def execute(self, args: dict) -> str:
-        self.todos = args["items"]
-        marks = {"pending": " ", "in_progress": "~", "done": "x"}
-        return "\n".join(
-            f"[{marks[item['status']]}] {item['content']}" for item in self.todos
-        )
+        try:
+            self.todos = args["items"]
+            marks = {"pending": " ", "in_progress": "~", "done": "x"}
+            return "\n".join(
+                f"[{marks[item['status']]}] {item['content']}" for item in self.todos
+            )
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
 
 
 class WebSearchTool(Tool):
@@ -206,10 +209,13 @@ class WebSearchTool(Tool):
         self.firecrawl = Firecrawl(api_key=os.environ["FIRECRAWL_API_KEY"])
 
     def execute(self, args: dict) -> str:
-        result = self.firecrawl.search(args["query"], limit=5)
-        return "\n\n".join(
-            f"{item.title}\n{item.url}\n{item.description}" for item in result.web
-        )
+        try:
+            result = self.firecrawl.search(args["query"], limit=5)
+            return "\n\n".join(
+                f"{item.title}\n{item.url}\n{item.description}" for item in result.web
+            )
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
 
 
 class SpawnAgentTool(Tool):
@@ -233,15 +239,18 @@ class SpawnAgentTool(Tool):
         self.openai_tools = [to_openai_tool(tool) for tool in tools]
 
     def execute(self, args: dict) -> str:
-        messages = [
-            {"role": "system", "content": self.system_message},
-            {"role": "user", "content": args["prompt"]},
-        ]
-        return run_turn(
-            self.client,
-            self.model,
-            messages,
-            self.tools_by_name,
-            self.openai_tools,
-            auto_approve=True,
-        )
+        try:
+            messages = [
+                {"role": "system", "content": self.system_message},
+                {"role": "user", "content": args["prompt"]},
+            ]
+            return run_turn(
+                self.client,
+                self.model,
+                messages,
+                self.tools_by_name,
+                self.openai_tools,
+                auto_approve=True,
+            )
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"

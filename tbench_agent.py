@@ -28,7 +28,9 @@ class AvartanAgent(BaseInstalledAgent):
         await self.exec_as_agent(
             environment,
             command=(
-                "pip install --break-system-packages "
+                "if pip install --help 2>&1 | grep -q break-system-packages; then "
+                "PIP_FLAG=--break-system-packages; else PIP_FLAG=; fi; "
+                "pip install $PIP_FLAG "
                 "git+https://github.com/Nikhil1169/avartan.git@main"
             ),
         )
