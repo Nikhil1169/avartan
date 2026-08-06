@@ -15,6 +15,7 @@ def run_turn(
 ):
     content = ""
     iterations = 0
+    length_streak = 0
 
     while True:
         iterations += 1
@@ -34,6 +35,7 @@ def run_turn(
                     messages=messages,
                     tools=openai_tools,
                     stream=True,
+                    max_tokens=8000,
                 )
 
                 for chunk in stream:
@@ -59,7 +61,13 @@ def run_turn(
                     if choice.finish_reason:
                         finish_reason = choice.finish_reason
 
-                print(f"[finish_reason] {finish_reason!r}")
+                if finish_reason == "length":
+                    print(
+                        f"[finish_reason] {finish_reason!r} — "
+                        "response was truncated, continuing"
+                    )
+                else:
+                    print(f"[finish_reason] {finish_reason!r}")
 
                 error = None
                 break
@@ -75,6 +83,7 @@ def run_turn(
             return content
 
         if finish_reason == "tool_calls":
+            length_streak = 0
             messages.append(
                 {
                     "role": "assistant",
@@ -137,6 +146,17 @@ def run_turn(
                         "content": result,
                     }
                 )
+            continue
+
+        if finish_reason == "length":
+            length_streak += 1
+            messages.append({"role": "assistant", "content": content or None})
+            if length_streak >= 3:
+                print(
+                    "error: model kept hitting the length limit after "
+                    f"{length_streak} attempts, giving up"
+                )
+                return content
             continue
 
         messages.append({"role": "assistant", "content": content})
