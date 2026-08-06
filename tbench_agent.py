@@ -27,7 +27,10 @@ class AvartanAgent(BaseInstalledAgent):
         )
         await self.exec_as_agent(
             environment,
-            command="pip install git+https://github.com/Nikhil1169/avartan.git@main",
+            command=(
+                "pip install --break-system-packages "
+                "git+https://github.com/Nikhil1169/avartan.git@main"
+            ),
         )
 
     @override
