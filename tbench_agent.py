@@ -44,6 +44,9 @@ class AvartanAgent(BaseInstalledAgent):
         escaped_instruction = shlex.quote(instruction)
         await self.exec_as_agent(
             environment,
-            command=f"avartan --task {escaped_instruction} --max-iterations 30",
+            command=(
+                f"avartan --task {escaped_instruction} --max-iterations 30 "
+                "2>&1 | stdbuf -oL tee /logs/agent/avartan.txt"
+            ),
             env=env,
         )
