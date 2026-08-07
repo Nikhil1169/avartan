@@ -42,6 +42,7 @@ class AvartanAgent(BaseInstalledAgent):
         env = {
             "OPENROUTER_API_KEY": self._get_env("OPENROUTER_API_KEY"),
             "FIRECRAWL_API_KEY": self._get_env("FIRECRAWL_API_KEY"),
+            "HALO_TRACES_PATH": "/logs/agent/traces.jsonl",
         }
         escaped_instruction = shlex.quote(instruction)
         await self.exec_as_agent(
