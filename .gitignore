@@ -6,3 +6,4 @@ avartan.egg-info/
 .claude/
 jobs/
 traces.jsonl
+combined_traces.jsonl

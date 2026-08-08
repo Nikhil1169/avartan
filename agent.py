@@ -22,6 +22,7 @@ def run_turn(
     content = ""
     iterations = 0
     length_streak = 0
+    traced_message_count = 0
 
     while True:
         iterations += 1
@@ -40,7 +41,10 @@ def run_turn(
         with llm_span:
             llm_span.attributes["llm.provider"] = "openrouter"
             llm_span.attributes["llm.model_name"] = model
-            llm_span.attributes["llm.input_messages"] = to_json(messages)
+            llm_span.attributes["llm.input_messages"] = to_json(
+                messages[traced_message_count:]
+            )
+            traced_message_count = len(messages)
 
             for attempt in range(2):
                 content = ""
