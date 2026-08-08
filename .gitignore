@@ -7,3 +7,5 @@ avartan.egg-info/
 jobs/
 traces.jsonl
 combined_traces.jsonl
+combined_traces.jsonl.engine-index.jsonl
+combined_traces.jsonl.engine-index.meta.json

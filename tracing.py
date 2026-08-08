@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 EXPORT_SCHEMA_VERSION = 1
 DEFAULT_OUTPUT_PATH = "traces.jsonl"
+TOOL_OUTPUT_MAX_CHARS = 5000
 
 
 def _now_otlp() -> str:
@@ -41,6 +42,12 @@ def to_json(v):
 
 def _drop_none(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
+
+
+def truncate_tool_output(value, max_chars: int = TOOL_OUTPUT_MAX_CHARS):
+    if not isinstance(value, str) or len(value) <= max_chars:
+        return value
+    return value[:max_chars] + f"...[truncated, original length: {len(value)} chars]"
 
 
 class Tracer:
@@ -104,6 +111,8 @@ class Span:
             status = {"code": "STATUS_CODE_OK", "message": ""}
 
         attrs = _drop_none(self.attributes)
+        if self.kind == "TOOL" and "output.value" in attrs:
+            attrs["output.value"] = truncate_tool_output(attrs["output.value"])
         attrs["openinference.span.kind"] = self.kind
         attrs.update(
             {
