@@ -4,6 +4,34 @@ import openai
 
 from tracing import NullSpan, to_json
 
+BASE_MAX_TOKENS = 8000
+LENGTH_RETRY_MAX_TOKENS = 12000
+MAX_LENGTH_ATTEMPTS = 5
+
+
+def _compact_messages(messages):
+    system = next((m for m in messages if m.get("role") == "system"), None)
+    first_user = next((m for m in messages if m.get("role") == "user"), None)
+    tool_call_count = sum(1 for m in messages if m.get("role") == "tool")
+
+    compacted = []
+    if system:
+        compacted.append(system)
+    if first_user:
+        compacted.append(first_user)
+    compacted.append(
+        {
+            "role": "user",
+            "content": (
+                "[Context condensed after repeated truncation — "
+                f"{tool_call_count} tool result(s) from earlier in this conversation "
+                "were dropped to free up space. Continue the task above; re-run any "
+                "tool calls whose results you still need, and keep your response concise.]"
+            ),
+        }
+    )
+    return compacted
+
 
 def run_turn(
     client,
@@ -23,6 +51,7 @@ def run_turn(
     iterations = 0
     length_streak = 0
     traced_message_count = 0
+    current_max_tokens = BASE_MAX_TOKENS
 
     while True:
         iterations += 1
@@ -32,6 +61,7 @@ def run_turn(
             return content
 
         error = None
+        current_tools = openai_tools
         llm_span = (
             tracer.span(f"response.{model}", "LLM", trace_id, parent_span_id)
             if tracer
@@ -55,9 +85,9 @@ def run_turn(
                     stream = client.chat.completions.create(
                         model=model,
                         messages=messages,
-                        tools=openai_tools,
+                        tools=current_tools,
                         stream=True,
-                        max_tokens=8000,
+                        max_tokens=current_max_tokens,
                     )
 
                     for chunk in stream:
@@ -93,6 +123,19 @@ def run_turn(
 
                     error = None
                     break
+                except openai.BadRequestError as e:
+                    error = e
+                    if "tool calls cutoff by max_tokens" in str(e).lower():
+                        print(
+                            "[retry] tool calls cutoff by max_tokens — "
+                            "retrying with a reduced tool set"
+                        )
+                        current_tools = [
+                            t
+                            for t in openai_tools
+                            if tools_by_name.get(t["function"]["name"])
+                            and tools_by_name[t["function"]["name"]].is_read_only
+                        ]
                 except openai.APIError as e:
                     error = e
                 except Exception as e:
@@ -110,6 +153,7 @@ def run_turn(
 
             if finish_reason == "tool_calls":
                 length_streak = 0
+                current_max_tokens = BASE_MAX_TOKENS
                 assistant_message = {
                     "role": "assistant",
                     "content": content or None,
@@ -198,17 +242,51 @@ def run_turn(
                 assistant_message = {"role": "assistant", "content": content or None}
                 llm_span.attributes["llm.output_messages"] = to_json([assistant_message])
                 messages.append(assistant_message)
-                if length_streak >= 3:
+
+                if length_streak >= MAX_LENGTH_ATTEMPTS:
                     message = (
-                        f"model kept hitting the length limit after "
+                        "model kept hitting the length limit after "
                         f"{length_streak} attempts, giving up"
                     )
                     print(f"error: {message}")
                     if agent_span is not None:
                         agent_span.error = message
                     return content
+
+                if length_streak == 1:
+                    current_max_tokens = LENGTH_RETRY_MAX_TOKENS
+                    print(
+                        f"[length-retry] bumping max_tokens to {current_max_tokens} and retrying"
+                    )
+                elif length_streak == 2:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your previous response was cut off for being too long. "
+                                "Please continue, but be more concise."
+                            ),
+                        }
+                    )
+                    print("[length-retry] asked for a more concise response")
+                elif length_streak == 3:
+                    messages[:] = _compact_messages(messages)
+                    traced_message_count = 0
+                    current_max_tokens = BASE_MAX_TOKENS
+                    print(
+                        "[length-retry] summarized context and continuing with a fresh window"
+                    )
+                else:
+                    current_max_tokens = LENGTH_RETRY_MAX_TOKENS
+                    print(
+                        f"[length-retry] bumping max_tokens to {current_max_tokens} "
+                        "again and retrying"
+                    )
+
                 continue
 
+            length_streak = 0
+            current_max_tokens = BASE_MAX_TOKENS
             assistant_message = {"role": "assistant", "content": content}
             llm_span.attributes["llm.output_messages"] = to_json([assistant_message])
             messages.append(assistant_message)

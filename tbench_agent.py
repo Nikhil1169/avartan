@@ -48,7 +48,7 @@ class AvartanAgent(BaseInstalledAgent):
         await self.exec_as_agent(
             environment,
             command=(
-                f"avartan --task {escaped_instruction} --max-iterations 30 "
+                f"avartan --task {escaped_instruction} --max-iterations 42 "
                 "2>&1 | stdbuf -oL tee /logs/agent/avartan.txt"
             ),
             env=env,
