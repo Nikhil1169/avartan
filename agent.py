@@ -136,6 +136,17 @@ def run_turn(
                             if tools_by_name.get(t["function"]["name"])
                             and tools_by_name[t["function"]["name"]].is_read_only
                         ]
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Your previous write_file call was too large and got "
+                                    "cut off. Retry with a smaller payload — split it into "
+                                    "multiple smaller edit_file calls, or reduce tokens per "
+                                    "call."
+                                ),
+                            }
+                        )
                 except openai.APIError as e:
                     error = e
                 except Exception as e:
