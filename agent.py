@@ -123,7 +123,7 @@ def run_turn(
 
                     error = None
                     break
-                except openai.BadRequestError as e:
+                except openai.APIError as e:
                     error = e
                     if "tool calls cutoff by max_tokens" in str(e).lower():
                         print(
@@ -147,8 +147,6 @@ def run_turn(
                                 ),
                             }
                         )
-                except openai.APIError as e:
-                    error = e
                 except Exception as e:
                     error = e
 
