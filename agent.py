@@ -7,6 +7,33 @@ from tracing import NullSpan, to_json
 BASE_MAX_TOKENS = 8000
 LENGTH_RETRY_MAX_TOKENS = 12000
 MAX_LENGTH_ATTEMPTS = 5
+TOOL_OUTPUT_MAX_CHARS = 15000
+REPEAT_CALL_THRESHOLD = 3
+CONVERGENCE_NUDGE_FRACTION = 0.85
+TOOL_ALIASES = {
+    "read": "read_file",
+    "write": "write_file",
+    "edit": "edit_file",
+    "shell": "bash",
+    "search": "grep",
+}
+
+
+def _nudge_if_repeating(recent_calls, name, arguments, messages):
+    recent_calls.append((name, arguments))
+    del recent_calls[:-REPEAT_CALL_THRESHOLD]
+    if len(recent_calls) == REPEAT_CALL_THRESHOLD and len(set(recent_calls)) == 1:
+        recent_calls.clear()
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "You've repeated the exact same tool call several times in a "
+                    "row without new results. Stop and try a fundamentally "
+                    "different approach."
+                ),
+            }
+        )
 
 
 def _compact_messages(messages):
@@ -52,6 +79,11 @@ def run_turn(
     length_streak = 0
     traced_message_count = 0
     current_max_tokens = BASE_MAX_TOKENS
+    recent_tool_calls = []
+    convergence_nudged = False
+    convergence_nudge_at = (
+        int(max_iterations * CONVERGENCE_NUDGE_FRACTION) if max_iterations else None
+    )
 
     while True:
         iterations += 1
@@ -59,6 +91,23 @@ def run_turn(
             if agent_span is not None:
                 agent_span.error = f"hit max_iterations ({max_iterations}) without finishing"
             return content
+
+        if (
+            convergence_nudge_at is not None
+            and not convergence_nudged
+            and iterations >= convergence_nudge_at
+        ):
+            convergence_nudged = True
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "You're nearing the iteration budget for this task. Stop "
+                        "exploring alternative approaches and commit to finalizing "
+                        "your best current solution now."
+                    ),
+                }
+            )
 
         error = None
         current_tools = openai_tools
@@ -213,9 +262,13 @@ def run_turn(
                                     "content": result,
                                 }
                             )
+                            _nudge_if_repeating(
+                                recent_tool_calls, call["name"], call["arguments"], messages
+                            )
                             continue
 
-                        tool = tools_by_name.get(call["name"])
+                        tool_name = TOOL_ALIASES.get(call["name"], call["name"])
+                        tool = tools_by_name.get(tool_name)
 
                         if tool is None:
                             result = (
@@ -233,6 +286,14 @@ def run_turn(
                         else:
                             result = tool.execute(args)
 
+                        if isinstance(result, str) and len(result) > TOOL_OUTPUT_MAX_CHARS:
+                            result = (
+                                result[:TOOL_OUTPUT_MAX_CHARS]
+                                + f"\n[Truncated: {len(result)} chars total. "
+                                "Re-run with a narrower command or save full output "
+                                "to a file.]"
+                            )
+
                         tool_span.attributes["output.value"] = result
                         if isinstance(result, str) and result.startswith("error:"):
                             tool_span.error = result
@@ -243,6 +304,9 @@ def run_turn(
                                 "tool_call_id": call["id"],
                                 "content": result,
                             }
+                        )
+                        _nudge_if_repeating(
+                            recent_tool_calls, call["name"], call["arguments"], messages
                         )
                 continue
 

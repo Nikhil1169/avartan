@@ -147,7 +147,12 @@ class BashTool(Tool):
     def execute(self, args: dict) -> str:
         try:
             result = subprocess.run(
-                args["command"], shell=True, capture_output=True, text=True
+                args["command"],
+                shell=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             return result.stdout + result.stderr
         except Exception as e:
