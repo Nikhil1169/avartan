@@ -10,6 +10,8 @@ MAX_LENGTH_ATTEMPTS = 5
 TOOL_OUTPUT_MAX_CHARS = 15000
 REPEAT_CALL_THRESHOLD = 3
 CONVERGENCE_NUDGE_FRACTION = 0.85
+EMPTY_RESPONSE_CHAR_THRESHOLD = 20
+MIN_TOOL_CALLS_FOR_PROGRESS = 3
 TOOL_ALIASES = {
     "read": "read_file",
     "write": "write_file",
@@ -84,6 +86,8 @@ def run_turn(
     convergence_nudge_at = (
         int(max_iterations * CONVERGENCE_NUDGE_FRACTION) if max_iterations else None
     )
+    total_tool_calls = 0
+    bailout_retried = False
 
     while True:
         iterations += 1
@@ -231,6 +235,7 @@ def run_turn(
                 messages.append(assistant_message)
 
                 for call in tool_calls.values():
+                    total_tool_calls += 1
                     print(f"[tool_call] name={call['name']!r} arguments={call['arguments']!r}")
 
                     tool_span = (
@@ -356,6 +361,36 @@ def run_turn(
                         "again and retrying"
                     )
 
+                continue
+
+            is_suspicious_bailout = (
+                finish_reason == "stop"
+                and len((content or "").strip()) < EMPTY_RESPONSE_CHAR_THRESHOLD
+                and total_tool_calls < MIN_TOOL_CALLS_FOR_PROGRESS
+            )
+            if is_suspicious_bailout:
+                llm_span.attributes["llm.suspicious_bailout"] = True
+                print(
+                    "[bailout] finish_reason='stop' with near-empty content "
+                    f"({len((content or '').strip())} chars) after only "
+                    f"{total_tool_calls} tool call(s)"
+                )
+
+            if is_suspicious_bailout and not bailout_retried:
+                bailout_retried = True
+                print("[bailout] retrying once with an explicit continue-or-explain prompt")
+                assistant_message = {"role": "assistant", "content": content or None}
+                llm_span.attributes["llm.output_messages"] = to_json([assistant_message])
+                messages.append(assistant_message)
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Your last response was empty. Continue working on the "
+                            "task, or explain what's blocking you."
+                        ),
+                    }
+                )
                 continue
 
             length_streak = 0
