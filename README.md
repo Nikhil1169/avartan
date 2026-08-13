@@ -104,3 +104,24 @@ avartan --task-file task.txt --max-iterations 20
 ## Configuration
 
 Drop an `AVARTAN.md` file in a project's root directory to append project-specific instructions to avartan's system prompt whenever it's run from that directory.
+
+## Self-Improvement Loop (HALO)
+
+avartan was built from scratch, then benchmarked against [Terminal-Bench 2.1](https://www.tbench.ai/) and run through 2 full HALO (Hierarchical Agent Loop Optimization) cycles: trace collection → RLM analysis via `halo-engine` → harness fixes → re-measure. Across both rounds, this found and fixed 8 confirmed harness bugs.
+
+Final result: **11/35 tasks passed (31.4%)**, using Poolside's Laguna S 2.1 (free tier).
+
+![Final benchmark result](assets/final-result.png)
+
+### How it works
+
+```mermaid
+flowchart TD
+    A[Run task] --> B[Emit traces]
+    B --> C[halo-engine RLM<br/>analyzes patterns]
+    C --> D[Failure report<br/>w/ code citations]
+    D --> E[Verify + apply fixes]
+    E --> F[Re-run benchmark]
+    F --> B
+    F -.-> G[Result: 31.4%]
+```
